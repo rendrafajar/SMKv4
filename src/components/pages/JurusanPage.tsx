@@ -1,4 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import {
+  getAllJurusan,
+  addJurusan,
+  updateJurusan,
+  deleteJurusan,
+} from "@/models/jurusan";
 import {
   Card,
   CardContent,
@@ -59,35 +65,28 @@ interface Jurusan {
 }
 
 const JurusanPage = () => {
-  const [jurusanList, setJurusanList] = useState<Jurusan[]>([
-    {
-      id: "1",
-      kode: "RPL",
-      nama: "Rekayasa Perangkat Lunak",
-      deskripsi: "Jurusan yang fokus pada pengembangan software dan aplikasi",
-      ketuaJurusan: "Budi Santoso",
-      tahunDibentuk: 2010,
-      jumlahKelas: 6,
-    },
-    {
-      id: "2",
-      kode: "TKJ",
-      nama: "Teknik Komputer dan Jaringan",
-      deskripsi: "Jurusan yang fokus pada infrastruktur jaringan dan hardware",
-      ketuaJurusan: "Siti Aminah",
-      tahunDibentuk: 2008,
-      jumlahKelas: 6,
-    },
-    {
-      id: "3",
-      kode: "MM",
-      nama: "Multimedia",
-      deskripsi: "Jurusan yang fokus pada desain grafis dan multimedia",
-      ketuaJurusan: "Ahmad Fauzi",
-      tahunDibentuk: 2012,
-      jumlahKelas: 4,
-    },
-  ]);
+  const [jurusanList, setJurusanList] = useState<Jurusan[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch jurusan data from database
+  useEffect(() => {
+    const fetchJurusan = async () => {
+      try {
+        setIsLoading(true);
+        const data = await getAllJurusan();
+        setJurusanList(data);
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching jurusan data:", err);
+        setError("Gagal memuat data jurusan");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchJurusan();
+  }, []);
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -106,45 +105,65 @@ const JurusanPage = () => {
     jumlahKelas: 0,
   });
 
-  const handleAddJurusan = () => {
-    const jurusan: Jurusan = {
-      id: Date.now().toString(),
-      ...newJurusan,
-    };
-    setJurusanList([...jurusanList, jurusan]);
-    setIsAddDialogOpen(false);
-    setNewJurusan({
-      kode: "",
-      nama: "",
-      deskripsi: "",
-      ketuaJurusan: "",
-      tahunDibentuk: new Date().getFullYear(),
-      jumlahKelas: 0,
-    });
+  const handleAddJurusan = async () => {
+    try {
+      const addedJurusan = await addJurusan(newJurusan);
+      setJurusanList([...jurusanList, addedJurusan]);
+      setIsAddDialogOpen(false);
+      setNewJurusan({
+        kode: "",
+        nama: "",
+        deskripsi: "",
+        ketuaJurusan: "",
+        tahunDibentuk: new Date().getFullYear(),
+        jumlahKelas: 0,
+      });
+    } catch (err) {
+      console.error("Error adding jurusan:", err);
+      alert("Gagal menambahkan jurusan. Silakan coba lagi.");
+    }
   };
 
-  const handleEditJurusan = () => {
+  const handleEditJurusan = async () => {
     if (!selectedJurusan) return;
 
-    const updatedList = jurusanList.map((jurusan) =>
-      jurusan.id === selectedJurusan.id ? selectedJurusan : jurusan,
-    );
+    try {
+      const updatedJurusan = await updateJurusan(selectedJurusan);
 
-    setJurusanList(updatedList);
-    setIsEditDialogOpen(false);
-    setSelectedJurusan(null);
+      const updatedList = jurusanList.map((jurusan) =>
+        jurusan.id === updatedJurusan.id ? updatedJurusan : jurusan,
+      );
+
+      setJurusanList(updatedList);
+      setIsEditDialogOpen(false);
+      setSelectedJurusan(null);
+    } catch (err) {
+      console.error("Error updating jurusan:", err);
+      alert("Gagal memperbarui jurusan. Silakan coba lagi.");
+    }
   };
 
-  const handleDeleteJurusan = () => {
+  const handleDeleteJurusan = async () => {
     if (!selectedJurusan) return;
 
-    const updatedList = jurusanList.filter(
-      (jurusan) => jurusan.id !== selectedJurusan.id,
-    );
+    try {
+      const success = await deleteJurusan(selectedJurusan.id);
 
-    setJurusanList(updatedList);
-    setIsDeleteDialogOpen(false);
-    setSelectedJurusan(null);
+      if (success) {
+        const updatedList = jurusanList.filter(
+          (jurusan) => jurusan.id !== selectedJurusan.id,
+        );
+
+        setJurusanList(updatedList);
+        setIsDeleteDialogOpen(false);
+        setSelectedJurusan(null);
+      } else {
+        throw new Error("Failed to delete jurusan");
+      }
+    } catch (err) {
+      console.error("Error deleting jurusan:", err);
+      alert("Gagal menghapus jurusan. Silakan coba lagi.");
+    }
   };
 
   const handleExport = () => {
@@ -353,53 +372,73 @@ const JurusanPage = () => {
             </div>
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Kode</TableHead>
-                <TableHead>Nama Jurusan</TableHead>
-                <TableHead>Ketua Jurusan</TableHead>
-                <TableHead>Tahun Dibentuk</TableHead>
-                <TableHead>Jumlah Kelas</TableHead>
-                <TableHead className="text-right">Aksi</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {jurusanList.map((jurusan) => (
-                <TableRow key={jurusan.id}>
-                  <TableCell className="font-medium">{jurusan.kode}</TableCell>
-                  <TableCell>{jurusan.nama}</TableCell>
-                  <TableCell>{jurusan.ketuaJurusan}</TableCell>
-                  <TableCell>{jurusan.tahunDibentuk}</TableCell>
-                  <TableCell>{jurusan.jumlahKelas}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setSelectedJurusan(jurusan);
-                          setIsEditDialogOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setSelectedJurusan(jurusan);
-                          setIsDeleteDialogOpen(true);
-                        }}
-                      >
-                        <Trash className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          {isLoading ? (
+            <div className="flex justify-center items-center py-8">
+              <p>Memuat data jurusan...</p>
+            </div>
+          ) : error ? (
+            <div className="flex justify-center items-center py-8 text-destructive">
+              <p>{error}</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Kode</TableHead>
+                  <TableHead>Nama Jurusan</TableHead>
+                  <TableHead>Ketua Jurusan</TableHead>
+                  <TableHead>Tahun Dibentuk</TableHead>
+                  <TableHead>Jumlah Kelas</TableHead>
+                  <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {jurusanList.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-4">
+                      Tidak ada data jurusan
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  jurusanList.map((jurusan) => (
+                    <TableRow key={jurusan.id}>
+                      <TableCell className="font-medium">
+                        {jurusan.kode}
+                      </TableCell>
+                      <TableCell>{jurusan.nama}</TableCell>
+                      <TableCell>{jurusan.ketuaJurusan}</TableCell>
+                      <TableCell>{jurusan.tahunDibentuk}</TableCell>
+                      <TableCell>{jurusan.jumlahKelas}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedJurusan(jurusan);
+                              setIsEditDialogOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedJurusan(jurusan);
+                              setIsDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 

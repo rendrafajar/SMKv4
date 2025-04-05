@@ -8,13 +8,32 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Database, Check, AlertTriangle } from "lucide-react";
+import {
+  Loader2,
+  Database,
+  Check,
+  AlertTriangle,
+  Download,
+  Upload,
+} from "lucide-react";
 import { query, saveData } from "@/lib/db";
+import {
+  generateDatabaseSchema,
+  exportSchemaToFile,
+} from "@/utils/generateSchema";
+import { pushSchemaToRemoteDatabase } from "@/utils/databasePush";
 
 const DatabaseSetup = () => {
   const [isCreating, setIsCreating] = useState(false);
+  const [isPushing, setIsPushing] = useState(false);
   const [status, setStatus] = useState<
-    "idle" | "creating" | "success" | "error"
+    | "idle"
+    | "creating"
+    | "success"
+    | "error"
+    | "pushing"
+    | "push_success"
+    | "push_error"
   >("idle");
   const [message, setMessage] = useState("");
 
@@ -48,6 +67,9 @@ const DatabaseSetup = () => {
 
       await createUserTable();
       setMessage("Tabel User berhasil dibuat");
+
+      await createJurusanTable();
+      setMessage("Tabel Jurusan berhasil dibuat");
 
       // Insert sample data
       await insertSampleData();
@@ -103,6 +125,22 @@ const DatabaseSetup = () => {
         kapasitas INTEGER DEFAULT 0,
         jenis VARCHAR(50) DEFAULT 'kelas',
         fasilitas TEXT[] DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  };
+
+  const createJurusanTable = async () => {
+    await query(`
+      CREATE TABLE IF NOT EXISTS jurusan (
+        id VARCHAR(50) PRIMARY KEY,
+        kode VARCHAR(20) NOT NULL,
+        nama VARCHAR(100) NOT NULL,
+        deskripsi TEXT,
+        "ketuaJurusan" VARCHAR(100),
+        "tahunDibentuk" INTEGER,
+        "jumlahKelas" INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -246,6 +284,56 @@ const DatabaseSetup = () => {
           ('198112302012012004', 'Dewi Lestari', 'dewi@example.com', 'Kimia', 12, 24),
           ('199003152013011005', 'Eko Prasetyo', 'eko@example.com', 'Biologi', 12, 24)
         ON CONFLICT (nip) DO NOTHING
+      `);
+    }
+
+    // Insert sample jurusan data
+    try {
+      const jurusanData = [
+        {
+          id: "1",
+          kode: "RPL",
+          nama: "Rekayasa Perangkat Lunak",
+          deskripsi:
+            "Jurusan yang fokus pada pengembangan software dan aplikasi",
+          ketuaJurusan: "Budi Santoso",
+          tahunDibentuk: 2010,
+          jumlahKelas: 6,
+        },
+        {
+          id: "2",
+          kode: "TKJ",
+          nama: "Teknik Komputer dan Jaringan",
+          deskripsi:
+            "Jurusan yang fokus pada infrastruktur jaringan dan hardware",
+          ketuaJurusan: "Siti Aminah",
+          tahunDibentuk: 2008,
+          jumlahKelas: 6,
+        },
+        {
+          id: "3",
+          kode: "MM",
+          nama: "Multimedia",
+          deskripsi: "Jurusan yang fokus pada desain grafis dan multimedia",
+          ketuaJurusan: "Ahmad Fauzi",
+          tahunDibentuk: 2012,
+          jumlahKelas: 4,
+        },
+      ];
+
+      for (const jurusan of jurusanData) {
+        await saveData("jurusan", jurusan);
+      }
+    } catch (error) {
+      console.error("Error inserting jurusan data:", error);
+      // Fallback to SQL query if saveData fails
+      await query(`
+        INSERT INTO jurusan (id, kode, nama, deskripsi, "ketuaJurusan", "tahunDibentuk", "jumlahKelas")
+        VALUES 
+          ('1', 'RPL', 'Rekayasa Perangkat Lunak', 'Jurusan yang fokus pada pengembangan software dan aplikasi', 'Budi Santoso', 2010, 6),
+          ('2', 'TKJ', 'Teknik Komputer dan Jaringan', 'Jurusan yang fokus pada infrastruktur jaringan dan hardware', 'Siti Aminah', 2008, 6),
+          ('3', 'MM', 'Multimedia', 'Jurusan yang fokus pada desain grafis dan multimedia', 'Ahmad Fauzi', 2012, 4)
+        ON CONFLICT (id) DO NOTHING
       `);
     }
 
@@ -420,10 +508,10 @@ const DatabaseSetup = () => {
           )}
         </div>
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex flex-col space-y-2">
         <Button
           onClick={createTables}
-          disabled={isCreating || status === "success"}
+          disabled={isCreating || isPushing}
           className="w-full"
         >
           {isCreating ? (
@@ -437,9 +525,76 @@ const DatabaseSetup = () => {
               Database Berhasil Dibuat
             </>
           ) : (
-            "Buat Database"
+            <>
+              <Database className="mr-2 h-4 w-4" />
+              Buat Database
+            </>
           )}
         </Button>
+
+        <div className="flex w-full space-x-2">
+          <Button
+            onClick={() => {
+              const schema = generateDatabaseSchema();
+              exportSchemaToFile(schema);
+            }}
+            variant="outline"
+            className="flex-1"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export Schema SQL
+          </Button>
+
+          <Button
+            onClick={async () => {
+              setIsPushing(true);
+              setStatus("pushing");
+              setMessage("Mengirim schema ke database remote...");
+
+              try {
+                const schema = generateDatabaseSchema();
+                const result = await pushSchemaToRemoteDatabase(schema, {
+                  host: "103.235.153.148",
+                  database: "genelabv4",
+                  port: 5432,
+                  user: "postgres",
+                  password: "08410100231",
+                  ssl: false,
+                });
+
+                if (result.success) {
+                  setStatus("push_success");
+                  setMessage(result.message);
+                } else {
+                  setStatus("push_error");
+                  setMessage(result.message);
+                }
+              } catch (error) {
+                setStatus("push_error");
+                setMessage(
+                  `Error: ${error instanceof Error ? error.message : String(error)}`,
+                );
+              } finally {
+                setIsPushing(false);
+              }
+            }}
+            variant="outline"
+            className="flex-1"
+            disabled={isPushing}
+          >
+            {isPushing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Pushing...
+              </>
+            ) : (
+              <>
+                <Upload className="mr-2 h-4 w-4" />
+                Push ke Server
+              </>
+            )}
+          </Button>
+        </div>
       </CardFooter>
     </Card>
   );

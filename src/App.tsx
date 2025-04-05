@@ -16,6 +16,7 @@ import VisualisasiPage from "./components/pages/VisualisasiPage";
 import LaporanPage from "./components/pages/LaporanPage";
 import PenggunaPage from "./components/pages/PenggunaPage";
 import PengaturanPage from "./components/pages/PengaturanPage";
+import JurusanPage from "./components/pages/JurusanPage";
 
 function AppRoutes() {
   const tempoRoutes =
@@ -69,6 +70,14 @@ function AppRoutes() {
           element={
             <DashboardLayout title="Manajemen Kurikulum">
               <KurikulumPage />
+            </DashboardLayout>
+          }
+        />
+        <Route
+          path="/jurusan"
+          element={
+            <DashboardLayout title="Manajemen Jurusan">
+              <JurusanPage />
             </DashboardLayout>
           }
         />
